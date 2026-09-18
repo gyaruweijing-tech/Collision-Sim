@@ -28,8 +28,8 @@ export class SimObject {
 
   flash = 0;
   wander: Wander | null = null;
-  /** Whether "検知のみモード" is allowed to turn this into a sensor. */
-  sensorable = false;
+  /** Whether 検知のみモード should let the player pass through this object. */
+  phaseable = false;
 
   constructor(
     readonly ctx: SimContext,
@@ -107,9 +107,15 @@ export class SimObject {
     for (const m of this.materials) m.emissive.setScalar(v);
   }
 
-  setSensor(on: boolean): void {
-    if (!this.sensorable) return;
-    for (const c of this.colliders) c.setSensor(on);
+  /**
+   * Turns the push-apart on or off for this object.
+   *
+   * This is deliberately not `setSensor()`. A sensor collider stops responding
+   * to *everything*, so switching the enemies to sensors dropped them straight
+   * through the floor. Solver groups only silence the pairs we name.
+   */
+  setSolverGroups(groups: number): void {
+    for (const c of this.colliders) c.setSolverGroups(groups);
   }
 
   /** Random nudge, scaled by mass so light and heavy objects move alike. */
