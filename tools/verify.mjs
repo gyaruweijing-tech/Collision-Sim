@@ -83,6 +83,58 @@ check(
 const ghost = await walkInto(-0.6, { ghost: true });
 check(ghost.z < -7, `ghost mode: a kinematic player ignores the collider entirely (z=${ghost.z.toFixed(2)})`);
 
+// The auto door: the sensor box opens it, a bullet does not.
+const door = await page.evaluate(async () => {
+  const { sim } = window.collisionSim;
+  const body = sim.player.body;
+  const panelX = () => sim.doorForTest.panel.body.translation().x;
+
+  // Parked well clear of the doorway, the panel must stay shut.
+  body.setTranslation({ x: 0, y: 0.5, z: 6 }, true);
+  body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  for (let i = 0; i < 60; i++) sim.step({ x: 0, z: 0 });
+  const shut = panelX();
+
+  // A bullet crossing the doorway must not trigger it, and must be stopped.
+  sim.bullets.clear();
+  body.setTranslation({ x: -8, y: 1.0, z: 8 }, true);
+  body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  const dir = sim.player.position.clone();
+  dir.set(0, 0, -1);
+  sim.shoot(dir);
+  let bulletMinZ = 99;
+  for (let i = 0; i < 40; i++) {
+    sim.step({ x: 0, z: 0 });
+    const b = sim.bullets.live[0];
+    if (b) bulletMinZ = Math.min(bulletMinZ, b.object.body.translation().z);
+  }
+  const shutDuringShot = panelX();
+  sim.bullets.clear();
+
+  // Walking up to it must open it, and let the player through.
+  body.setTranslation({ x: -8, y: 0.5, z: 4.2 }, true);
+  body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  let open = shut;
+  for (let i = 0; i < 180; i++) {
+    sim.step({ x: 0, z: -1 });
+    // The panel closes again once the player is through, so track the extreme.
+    open = Math.min(open, panelX());
+  }
+  const playerZ = body.translation().z;
+
+  return { shut, shutDuringShot, open, playerZ, bulletMinZ };
+});
+check(
+  Math.abs(door.open - door.shut) > 2.0,
+  `auto door: opens when the player steps into the sensor box (slid ${(door.shut - door.open).toFixed(2)} m)`,
+);
+check(door.playerZ < -1.5, `auto door: the player gets through the opening (z=${door.playerZ.toFixed(2)})`);
+check(
+  Math.abs(door.shutDuringShot - door.shut) < 0.05,
+  'auto door: a bullet does not trigger the sensor',
+);
+check(door.bulletMinZ > -0.5, `auto door: the shut panel stops the bullet (z=${door.bulletMinZ.toFixed(2)})`);
+
 // Contact events have to reach the enemies too, not just the player.
 const contact = await page.evaluate(() => {
   const { sim } = window.collisionSim;

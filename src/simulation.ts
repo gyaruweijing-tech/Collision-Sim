@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { FIXED_DT, SOLVER_GROUPS } from './config.ts';
 import { buildArena, buildLights } from './arena.ts';
 import { BulletPool } from './bullets.ts';
+import { AutoDoor } from './door.ts';
 import { createDynamic, SimObject, type SimContext } from './objects.ts';
 import { Player } from './player.ts';
 import {
@@ -25,6 +26,7 @@ export class Simulation {
 
   private readonly eventQueue = new RAPIER.EventQueue(true);
   private readonly hammers: Hammer[] = [];
+  private door!: AutoDoor;
   private readonly props: SimObject[] = [];
   private readonly wanderers: SimObject[] = [];
   private rng = makeRng((Math.random() * 0xffffffff) >>> 0);
@@ -56,6 +58,11 @@ export class Simulation {
     return this.wanderers;
   }
 
+  /** Exposed for tools/verify.mjs. */
+  get doorForTest(): AutoDoor {
+    return this.door;
+  }
+
   get bodyCount(): number {
     return this.wanderers.length + this.props.length + this.hammers.length + 1;
   }
@@ -66,15 +73,22 @@ export class Simulation {
 
   private buildProps(): void {
     const L = PROP_LAYOUT;
-    this.props.push(
+    const phaseable = [
       createTrueDonut(this.ctx, L.trueDonut),
       createFakeDonut(this.ctx, L.fakeDonut),
       createFakeStar(this.ctx, L.fakeStar),
       createFakeRod(this.ctx, L.fakeRod),
-    );
-    for (const h of L.hammers) this.hammers.push(new Hammer(this.ctx, h.at, h.speed, h.phase));
+    ];
+    for (const p of phaseable) p.phaseable = true;
+    this.props.push(...phaseable);
 
-    for (const p of this.props) p.phaseable = true;
+    // The door's wall counts as structure, so 検知のみモード leaves it solid,
+    // the same way it leaves the arena walls solid. The panel is a prop.
+    this.door = new AutoDoor(this.ctx, L.door);
+    this.door.panel.phaseable = true;
+    this.props.push(this.door.pillars, this.door.panel, this.door.zone);
+
+    for (const h of L.hammers) this.hammers.push(new Hammer(this.ctx, h.at, h.speed, h.phase));
     for (const h of this.hammers) h.object.phaseable = true;
   }
 
@@ -82,6 +96,7 @@ export class Simulation {
     const taken: THREE.Vector3[] = [
       this.player.position,
       ...this.props.map((p) => p.spawnPosition),
+      PROP_LAYOUT.door,
       ...this.hammers.map((h) => h.object.spawnPosition),
     ];
 
@@ -145,6 +160,7 @@ export class Simulation {
       p.flash = 0;
       for (const m of p.materials) m.emissive.setScalar(0);
     }
+    this.door.reset();
     this.player.reset();
     this.buildWanderers();
   }
@@ -188,6 +204,9 @@ export class Simulation {
     const dt = FIXED_DT;
 
     this.player.step(move, dt);
+    // The overlap is read from the previous step's state, which is a frame of
+    // lag nobody can see, and keeps the query out of the middle of the step.
+    this.door.step(dt, this.isPlayerInDoorZone());
     for (const h of this.hammers) h.step(dt);
     for (const w of this.wanderers) w.tickWander(dt, this.rng);
 
@@ -201,13 +220,19 @@ export class Simulation {
       // Only contacts that involve the player (or one of their shots) light up.
       const interesting =
         a.kind === 'player' || b.kind === 'player' || a.kind === 'bullet' || b.kind === 'bullet';
-      if (!interesting) return;
+      if (!interesting || a.silent || b.silent) return;
       a.hit();
       b.hit();
     });
 
     for (const w of this.wanderers) w.keepInBounds();
     this.player.object.keepInBounds();
+  }
+
+  private isPlayerInDoorZone(): boolean {
+    const playerCollider = this.player.object.colliders[0];
+    if (!playerCollider) return false;
+    return this.world.intersectionPair(this.door.zoneCollider, playerCollider);
   }
 
   /** Per-rendered-frame work: visuals only. */
@@ -217,6 +242,7 @@ export class Simulation {
       w.syncMesh();
     }
     for (const p of this.props) p.tickFlash(dt);
+    this.door.panel.syncMesh();
     for (const h of this.hammers) {
       h.object.tickFlash(dt);
       h.object.syncMesh();

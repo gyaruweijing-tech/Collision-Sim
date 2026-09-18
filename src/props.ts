@@ -149,12 +149,14 @@ export class Hammer {
 }
 
 export const PROP_LAYOUT = {
+  door: new THREE.Vector3(-8, 0, 0),
   trueDonut: new THREE.Vector3(-4.6, DONUT.y, -6),
   fakeDonut: new THREE.Vector3(-0.6, DONUT.y, -6),
   fakeStar: new THREE.Vector3(3.6, STAR.outer + 0.05, -6),
   fakeRod: new THREE.Vector3(8.4, ROD.height / 2, -6),
   hammers: [
-    { at: new THREE.Vector3(-9.5, HAMMER.y, 3.5), speed: 1.7, phase: 0 },
+    // Kept clear of the auto door's sensor box, which this one used to sweep through.
+    { at: new THREE.Vector3(-11.2, HAMMER.y, 8.6), speed: 1.7, phase: 0 },
     { at: new THREE.Vector3(9.5, HAMMER.y, 3.5), speed: -2.1, phase: 1.2 },
     { at: new THREE.Vector3(0, HAMMER.y, -11.5), speed: 1.35, phase: 2.4 },
   ],
