@@ -30,6 +30,8 @@ export class SimObject {
   wander: Wander | null = null;
   /** Whether 検知のみモード should let the player pass through this object. */
   phaseable = false;
+  /** Contacts with this object do not flash anything (used by the door sensor). */
+  silent = false;
 
   constructor(
     readonly ctx: SimContext,
