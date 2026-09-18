@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1"
+    />
+    <meta name="theme-color" content="#1b1f27" />
+    <title>当たり判定シミュレーター</title>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div id="hud">
+      <div class="hud-row">
+        <button class="tgl" id="btn-debug" type="button" aria-pressed="false">判定表示</button>
+        <button class="tgl" id="btn-sensor" type="button" aria-pressed="false">検知のみ</button>
+        <button class="tgl" id="btn-ghost" type="button" aria-pressed="false">すり抜け</button>
+        <button class="act" id="btn-shoot" type="button">撃つ</button>
+        <button class="act" id="btn-reset" type="button">リセット</button>
+      </div>
+      <div class="hud-row">
+        <label for="count">敵の数</label>
+        <input id="count" type="range" min="1" max="5" step="1" value="2" />
+        <output id="count-out">2</output>
+        <span id="stats"></span>
+      </div>
+    </div>
+
+    <div id="stick" aria-hidden="true"><div id="stick-knob"></div></div>
+
+    <div id="boot">
+      <div class="boot-inner">
+        <div class="spinner"></div>
+        <p id="boot-msg">物理エンジンを読み込み中…</p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
