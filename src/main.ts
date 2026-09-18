@@ -75,8 +75,8 @@ async function main(): Promise<void> {
   });
 
   btnSensor.addEventListener('click', () => {
-    sim.setSensorMode(!sim.sensorMode);
-    setPressed(btnSensor, sim.sensorMode);
+    sim.setDetectOnly(!sim.detectOnly);
+    setPressed(btnSensor, sim.detectOnly);
   });
 
   btnGhost.addEventListener('click', () => {

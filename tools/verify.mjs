@@ -30,7 +30,7 @@ const walkInto = (x, options = {}) =>
   page.evaluate(({ x, ghost, sensor }) => {
     const { sim } = window.collisionSim;
     sim.setGhostMode(!!ghost);
-    sim.setSensorMode(!!sensor);
+    sim.setDetectOnly(!!sensor);
     const body = sim.player.body;
     body.setTranslation({ x, y: 0.5, z: -2.6 }, true);
     if (!ghost) body.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -38,7 +38,7 @@ const walkInto = (x, options = {}) =>
     const p = body.translation();
     const flashed = sim.player.object.materials.some((m) => m.emissive.r > 0);
     sim.setGhostMode(false);
-    sim.setSensorMode(false);
+    sim.setDetectOnly(false);
     return { x: p.x, y: p.y, z: p.z, flashed };
   }, { x, ...options });
 
@@ -63,6 +63,22 @@ check(
 const sensor = await walkInto(-0.6, { sensor: true });
 check(sensor.z < -7, `sensor mode: passes through the ball-collider donut (z=${sensor.z.toFixed(2)})`);
 check(sensor.flashed, 'sensor mode: overlap is still detected (the player lights up)');
+
+// 検知のみモード must not detach anything from the floor: an earlier version
+// switched the colliders to sensors, which stopped them colliding with
+// *everything* and dropped every enemy through the ground.
+const standing = await page.evaluate(() => {
+  const { sim } = window.collisionSim;
+  sim.setDetectOnly(true);
+  for (let i = 0; i < 180; i++) sim.step({ x: 0, z: 0 });
+  const fallen = sim.wanderersForTest.filter((w) => w.body.translation().y < -0.5).length;
+  sim.setDetectOnly(false);
+  return { fallen, total: sim.wanderersForTest.length };
+});
+check(
+  standing.fallen === 0,
+  `sensor mode: enemies stay on the floor (${standing.fallen}/${standing.total} fell through)`,
+);
 
 const ghost = await walkInto(-0.6, { ghost: true });
 check(ghost.z < -7, `ghost mode: a kinematic player ignores the collider entirely (z=${ghost.z.toFixed(2)})`);

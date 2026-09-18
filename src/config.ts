@@ -36,6 +36,35 @@ export const BULLET = {
   color: 0xfff2a8,
 };
 
+/**
+ * Which pairs of colliders push each other apart.
+ *
+ * A Rapier interaction group packs two 16-bit halves into one number: the top
+ * half is "which groups am I in", the bottom half is "which groups do I
+ * interact with". A pair is resolved only if each side's membership appears in
+ * the other side's filter.
+ *
+ * These are *solver* groups, not collision groups: excluding a pair stops the
+ * push-apart, but the contact is still detected and still raises an event. That
+ * is exactly what 検知のみモード needs — the player slips through the props
+ * while everything keeps standing on the floor.
+ */
+const GROUP = {
+  player: 0x0002,
+  prop: 0x0004,
+};
+
+const ALL = 0xffff;
+
+export const SOLVER_GROUPS = {
+  /** Everything pushes everything. */
+  normal: 0xffffffff,
+  /** The player ignores props (and only props). */
+  playerPhaseThrough: ((GROUP.player << 16) | (ALL & ~GROUP.prop)) >>> 0,
+  /** Props ignore the player, but still rest on the floor and shove each other. */
+  propPhaseThrough: ((GROUP.prop << 16) | (ALL & ~GROUP.player)) >>> 0,
+};
+
 /** Where an object counts as lost and gets sent back to its spawn point. */
 export const OUT_OF_BOUNDS = {
   minY: -5,

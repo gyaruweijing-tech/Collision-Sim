@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { FIXED_DT } from './config.ts';
+import { FIXED_DT, SOLVER_GROUPS } from './config.ts';
 import { buildArena, buildLights } from './arena.ts';
 import { BulletPool } from './bullets.ts';
 import { createDynamic, SimObject, type SimContext } from './objects.ts';
@@ -30,7 +30,7 @@ export class Simulation {
   private rng = makeRng((Math.random() * 0xffffffff) >>> 0);
 
   countPerKind = 2;
-  sensorMode = false;
+  detectOnly = false;
 
   constructor() {
     this.scene.background = new THREE.Color(0x1b1f27);
@@ -74,8 +74,8 @@ export class Simulation {
     );
     for (const h of L.hammers) this.hammers.push(new Hammer(this.ctx, h.at, h.speed, h.phase));
 
-    for (const p of this.props) p.sensorable = true;
-    for (const h of this.hammers) h.object.sensorable = true;
+    for (const p of this.props) p.phaseable = true;
+    for (const h of this.hammers) h.object.phaseable = true;
   }
 
   private buildWanderers(): void {
@@ -91,12 +91,12 @@ export class Simulation {
         const position = this.pickSpawn(taken, def.restHeight + 0.15);
         const object = createDynamic(this.ctx, kind, def, position);
         object.wander = { timer: range(this.rng, 0.2, 2.0) };
-        object.sensorable = true;
+        object.phaseable = true;
         this.wanderers.push(object);
         taken.push(position);
       }
     }
-    this.applySensorMode();
+    this.applyDetectOnly();
   }
 
   /** Finds a free-ish spot; gives up after a bounded number of tries. */
@@ -149,15 +149,24 @@ export class Simulation {
     this.buildWanderers();
   }
 
-  setSensorMode(on: boolean): void {
-    this.sensorMode = on;
-    this.applySensorMode();
+  /**
+   * 検知のみモード: the player slips through every object instead of being
+   * stopped by it, while contacts are still reported so both sides still flash.
+   * Everything else — gravity, the floor, objects shoving each other — carries
+   * on as normal.
+   */
+  setDetectOnly(on: boolean): void {
+    this.detectOnly = on;
+    this.applyDetectOnly();
   }
 
-  private applySensorMode(): void {
-    for (const o of this.wanderers) o.setSensor(this.sensorMode);
-    for (const p of this.props) p.setSensor(this.sensorMode);
-    for (const h of this.hammers) h.object.setSensor(this.sensorMode);
+  private applyDetectOnly(): void {
+    const props = this.detectOnly ? SOLVER_GROUPS.propPhaseThrough : SOLVER_GROUPS.normal;
+    const player = this.detectOnly ? SOLVER_GROUPS.playerPhaseThrough : SOLVER_GROUPS.normal;
+    for (const o of this.wanderers) if (o.phaseable) o.setSolverGroups(props);
+    for (const p of this.props) if (p.phaseable) p.setSolverGroups(props);
+    for (const h of this.hammers) if (h.object.phaseable) h.object.setSolverGroups(props);
+    this.player.object.setSolverGroups(player);
   }
 
   setGhostMode(on: boolean): void {
