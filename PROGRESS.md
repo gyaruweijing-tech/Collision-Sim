@@ -14,13 +14,16 @@
 | フェーズ | 状態 |
 |---|---|
 | 仕様レビュー（穴出し） | ✅ 完了（本ファイル 2章） |
-| 質問への回答待ち | ⏳ 進行中 |
-| Step1 床・壁・プレイヤー・スティック・カメラ | ⬜ 未着手 |
-| Step2 基本形5種 | ⬜ 未着手 |
-| Step3 凸包・複合形・ドーナツ・ハンマー | ⬜ 未着手 |
-| Step4 ズレ体験オブジェクト | ⬜ 未着手 |
-| Step5 UI・接触演出 | ⬜ 未着手 |
-| Step6 GitHub Pages デプロイ | ⬜ 未着手 |
+| 確認事項のユーザー回答 | ✅ 完了（5章） |
+| Step1 床・壁・プレイヤー・スティック・カメラ | ✅ 完了 |
+| Step2 基本形5種 | ✅ 完了 |
+| Step3 凸包・複合形・ドーナツ・回るハンマー | ✅ 完了 |
+| Step4 ズレ体験オブジェクト | ✅ 完了 |
+| Step5 UI・接触演出 | ✅ 完了 |
+| 追加：検知のみモード | ✅ 完了 |
+| 追加：すり抜けモード（CCDの代替。穴T 参照） | ✅ 完了 |
+| Step6 GitHub Pages デプロイ | ⚠️ ワークフロー作成済み。**Pages設定の手動操作待ち**（6章） |
+| 実機スマホでの確認 | ⬜ 未実施 |
 
 ---
 
@@ -124,13 +127,53 @@
 - **問題**：「最大数でカクつかない」が完了条件だが、達成手段が書かれていない。
 - **対応案**：`renderer.setPixelRatio(Math.min(devicePixelRatio, 2))`、影は使わない（またはライトのみ簡易）、`antialias` は DPR>1 なら false、マテリアルは `MeshLambertMaterial` 相当の軽量なもの、trimesh は1個のみ。FPS 表示を debug モードに付けて実測する。
 
+### ★S2.（実装中に発見）ドーナツを床に置くと、穴が高すぎて絶対に通れない
+- **問題**：リングを床に立てて置くと、穴の下端の高さは必ず「チューブ半径×2」になる（リング中心の高さ = 外半径 = R+tube、穴の下端 = 中心 − 内半径 = (R+tube) − (R−tube) = 2×tube）。Rをどれだけ大きくしても変わらない。床の上を歩くプレイヤーは**永久に穴をくぐれない**。仕様の「穴をプレイヤーが通り抜けられることを確認用」が成立しない。
+- **対応**：リングを床に**埋める**。中心を y=0.95 に置き、リング下部を床下に隠して「アーチ（門）」の形にした。穴の下端が床面より下に来るので、歩いて通り抜けられる。
+- **検証**：`tools/verify.mjs` の1項目目。z=-2.6 から前進して z=-14.15（反対側の壁）まで到達＝通り抜け成功。
+
+### ★T.（実装中に発見）**CCDのON/OFFでは「すり抜けバグ」を体感できない**
+- **問題**：仕様の「余裕があれば」項目にある「高速弾＋CCD ON/OFF切替ですり抜けを体感」が、**Rapier 0.20では再現しない**。実測した組み合わせは以下の通りで、CCDフラグの有無に関わらず1件もすり抜けなかった。
+
+| 標的 | 弾速 | 物理ステップ | CCD OFF | CCD ON |
+|---|---|---|---|---|
+| 厚さ8cmの板 | 20〜520 m/s | 1/60 | すべて停止 | すべて停止 |
+| 厚さ8cmの板 | 60 / 200 m/s | 1/20, 1/8 | すべて停止 | すべて停止 |
+| trimeshドーナツ（厚みゼロの殻） | 20〜130 m/s | 1/60 | すべて停止 | すべて停止 |
+
+  520m/sでは1ステップあたり8.67m進むので離散判定なら確実に飛び越えるはずだが、実測では1ステップで3.71mしか進まず板の手前で止まった（速度も520→400に落ちた）。Rapierのブロードフェーズが速度で予測したAABBを使って掃引しているため、CCDフラグと無関係に止まる。
+- **対応**：**動作しないトグルを出荷しない**という判断で、CCDトグルは削除し、弾は常にCCD有効（高速弾に対する正しい設定）にした。
+  代わりに「**すり抜け**」トグルを追加。プレイヤーの body を dynamic ⇄ kinematicPositionBased で切り替える。kinematic body は毎フレーム位置を書き込んで動かすため**あらゆるコライダーを無視して壁も敵もすり抜け、押し返されもしない**。これは「キャラを位置直接代入で動かしたらすり抜けた」という、初心者が実際に踏む王道のバグそのもので、仕様が体感させたかったことに最も近い。
+- **注意**：これは仕様に書かれていない機能の追加。不要なら削除可（`src/player.ts` の `setGhost` と HUD の `btn-ghost` のみ）。
+- 検証用に一時的に置いた「厚さ8cmの薄い板」は、CCDデモをやめた時点で役割がなくなったので削除した（シンプルさ優先）。上表の数値はその板で測ったもの。
+
+### U.（判明）ビルドサイズ
+- Rapier の WASM が base64 で JS に埋め込まれるため、バンドルは **3.44MB（gzip 1.23MB）**。回線が細いと初回表示に数秒かかる。ローディング表示（穴O対応）でごまかしているが、これ以上は減らせない（compat版の仕様）。
+
 ---
 
 ## 3. 実装方針（決定事項）
 
-- 構成: `src/main.ts` / `physics.ts` / `shapes.ts` / `objects.ts` / `player.ts` / `input.ts`（stick+keys）/ `camera.ts` / `ui.ts` / `debugDraw.ts` / `rng.ts`
+実際のファイル構成：
+
+| ファイル | 役割 |
+|---|---|
+| `src/main.ts` | 起動、レンダラ、固定タイムステップのループ、UI配線 |
+| `src/simulation.ts` | 物理ワールドと全オブジェクトの統括、衝突イベント処理 |
+| `src/shapes.ts` | **メッシュとコライダーをペアで定義**（穴B対策の要） |
+| `src/objects.ts` | SimObject（body＋メッシュ群＋光る演出＋場外復帰） |
+| `src/props.ts` | 固定物（ドーナツ2種・星・棒・薄板・回るハンマー） |
+| `src/player.ts` | 差分インパルス移動、すり抜けモード |
+| `src/arena.ts` | 床・見える低い壁・見えない高い壁・ライト |
+| `src/input.ts` | 仮想スティック（Pointer Events）＋WASD |
+| `src/cameraRig.ts` | 追従カメラ、縦横対応、カメラ基準の移動方向 |
+| `src/debugDraw.ts` | `debugRender()` の描画 |
+| `src/bullets.ts` | 高速弾 |
+| `src/config.ts` | 調整値を1箇所に |
+| `src/rng.ts` | 乱数ヘルパ |
+| `tools/verify.mjs` | 挙動の自動検査（Playwright） |
+
 - すべて素の TypeScript + DOM。UIフレームワークは入れない（シンプルさ優先）。
-- 各ステップ終わりでコミット。
 
 ---
 
@@ -140,6 +183,33 @@
 - リポジトリ確認。仕様書 `collision-sim-spec.md` のみ存在。
 - 仕様レビュー実施、穴18件を洗い出し（本ファイル2章）。
 - PROGRESS.md 作成。実装開始前にユーザーへ確認事項を提示。
+- ユーザー回答を受けて実装着手。Step1〜5 を一気に実装。
+- 依存を固定バージョンで導入：`three ~0.186.0` / `@dimforge/rapier3d-compat ~0.20.0` / `vite ~7.1` / `typescript ~5.9` / Node 22。
+- ヘッドレスChromiumで動作確認。iPhone相当（390×844, DPR2）とランドスケープの両方でレイアウト崩れなし。
+- 実装中に**新たな穴を2件発見**（穴S2・穴T、下記 2章末尾に追記）。
+- `tools/verify.mjs` を作成。この教材が主張する挙動9項目を物理ステップ直叩きで自動検査 → **全項目パス**。
+
+#### verify.mjs の結果（コンテナ内ヘッドレス）
+```
+ok  trimesh donut: the hole is a real hole (z=-14.15)
+ok  ball-collider donut: blocked out in front of the hole (z=-3.65)
+ok  star plate: stopped by its box collider (z=-5.47)
+ok  thin rod: stopped ~1.9 m short by its oversized ball (z=-4.08)
+ok  sensor mode: passes through the ball-collider donut (z=-14.15)
+ok  sensor mode: overlap is still detected (the player lights up)
+ok  ghost mode: a kinematic player ignores the collider entirely
+ok  contact flash: the enemy the player touches lights up
+ok  containment: 30 s of random impulses and nothing left the arena
+```
+
+#### 性能実測（ソフトウェアレンダリングのコンテナ内なので実機はもっと速いはず）
+| 状況 | FPS | body数 |
+|---|---|---|
+| 敵の数=2（初期値） | 35fps | 24 |
+| 敵の数=5（最大） | 29fps | 48 |
+| 最大・横持ち | 26fps | 48 |
+
+GPUなしでこの数字なので、実機のスマホでは60fps出る見込み。ただし**実機確認は未実施**。
 
 ---
 
